@@ -1,0 +1,17 @@
+*.log
+node_modules/
+/dist
+.env
+.DS_Store
+coverage/
+.idea/
+.vscode/
+*.swp
+*.bak
+*.tmp
+*.old
+*.orig
+*.rej
+*.class
+*.jar
+/build
