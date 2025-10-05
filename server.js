@@ -1,22 +1,38 @@
+// server.js
 const express = require("express");
+const cors = require("cors");
 const app = express();
-const PORT = 5000;
 
-// Parse JSON requests
-app.use(express.json());
+// ✅ Use Render's assigned port or local 5000
+const PORT = process.env.PORT || 5000;
 
-// Route for WooCommerce orders
-app.post("/orders", (req, res) => {
-  console.log("📦 New Order Received:", req.body);
+// ✅ Middleware
+app.use(cors());
+app.use(express.json({ limit: "10mb" })); // handle large JSON bodies if needed
 
-  // Send back a response
+// ✅ Health check route
+app.get("/", (req, res) => {
   res.json({
-    success: true,
-    message: "Order received successfully!",
-    order: req.body
+    message: "WooCommerce Test API is running ✅",
+    status: "OK",
   });
 });
 
+// ✅ Route for WooCommerce orders
+app.post("/orders", (req, res) => {
+  console.log("📦 New Order Received:");
+  console.log(JSON.stringify(req.body, null, 2)); // Pretty log
+
+  // Example: save order data to database later (for now, just confirm receipt)
+  res.status(200).json({
+    success: true,
+    message: "Order received successfully!",
+    receivedAt: new Date().toISOString(),
+    order: req.body,
+  });
+});
+
+// ✅ Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Test API running at http://localhost:${PORT}/orders`);
+  console.log(`🚀 Test API running on port ${PORT}`);
 });
