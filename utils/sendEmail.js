@@ -1,28 +1,35 @@
-const axios = require("axios");
+const nodemailer = require("nodemailer");
 
-const SERVICE_ID = process.env.EMAILJS_SERVICE_ID;
-const TEMPLATE_ID = process.env.EMAILJS_TEMPLATE_ID;
-const PUBLIC_KEY = process.env.EMAILJS_PUBLIC_KEY;
-
-async function sendOrderEmail(to, subject, message) {
-  if (!to) return console.log("⚠️ No recipient email provided, skipping.");
-
+const sendOrderEmail = async (to, subject, text, html = null) => {
   try {
-    const response = await axios.post("https://api.emailjs.com/api/v1.0/email/send", {
-      service_id: SERVICE_ID,
-      template_id: TEMPLATE_ID,
-      user_id: PUBLIC_KEY,
-      template_params: {
-        to_email: to,
-        subject,
-        message,
+    // Configure Brevo SMTP transporter
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,       // smtp-relay.brevo.com
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: false,                     // false for 587
+      auth: {
+        user: process.env.SMTP_USER,     // your Brevo email
+        pass: process.env.SMTP_PASS,     // your SMTP key
       },
     });
 
-    console.log(`✅ Email sent to ${to}: ${response.status}`);
-  } catch (err) {
-    console.error("❌ EmailJS send error:", err.response?.data || err.message);
+    // Prepare email options
+    const mailOptions = {
+      from: `"Dloklz Store" <${process.env.EMAIL_FROM}>`,
+      to,
+      subject,
+      text,
+      ...(html && { html }), // if html is provided, include it
+    };
+
+    // Send email
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Email sent to ${to}: ${info.messageId}`);
+    return info;
+  } catch (error) {
+    console.error("❌ Error sending email:", error);
+    throw error;
   }
-}
+};
 
 module.exports = sendOrderEmail;
