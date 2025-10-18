@@ -2,54 +2,80 @@ const express = require("express");
 const router = express.Router();
 const Order = require("../models/Order");
 const protect = require("../middleware/authMiddleware");
-const sendOrderEmail = require("../utils/sendEmail"); // EmailJS integration
+const sendOrderEmail = require("../utils/sendEmail"); // SMTP email utility
 
-// GET all orders (owner sees all, vendor sees only their orders)
+// =======================================================
+// GET all orders (Owner: all | Vendor: only their orders)
+// =======================================================
 router.get("/", protect(), async (req, res) => {
   try {
-    let orders;
+    let orders = [];
+
     if (req.user.role === "owner") {
       orders = await Order.find().sort({ createdAt: -1 });
     } else if (req.user.role === "vendor") {
-      // Filter by vendor_id present in items
       orders = await Order.find({ "items.vendor_id": req.user.vendor_id }).sort({ createdAt: -1 });
     }
+
     res.json(orders);
   } catch (err) {
-    console.error("GET /orders error:", err);
+    console.error("❌ GET /orders error:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
 
-// POST a new order or update existing order (from WordPress webhook)
+// =======================================================
+// POST a new order or update existing order (Webhook)
+// =======================================================
 router.post("/", async (req, res) => {
   const { id, status, total, currency, payment, customer, items } = req.body;
 
   try {
     let order = await Order.findOne({ orderId: id });
 
-    // If order exists, update status and notify customer
+    // ======================================
+    // If existing order → update its status
+    // ======================================
     if (order) {
       const oldStatus = order.status;
-      if (status !== oldStatus) {
-        order.status = status;
-        order.old_status = oldStatus;
-        order.new_status = status;
-        await order.save();
 
-        if (customer?.email) {
+      if (status === oldStatus) {
+        return res.json({ message: "No status change", order });
+      }
+
+      order.status = status;
+      order.old_status = oldStatus;
+      order.new_status = status;
+      await order.save();
+
+      console.log(`🔄 Order #${id} status updated: ${oldStatus} → ${status}`);
+
+      if (customer?.email) {
+        try {
           await sendOrderEmail(
             customer.email,
             "Order Status Updated",
-            `Hi ${customer.name || "Customer"},\n\nYour order #${id} status has been updated from "${oldStatus}" to "${status}".`
+            `
+              <div style="font-family: Arial, sans-serif; color: #333;">
+                <h2>Hi ${customer.name || "Customer"},</h2>
+                <p>Your order <strong>#${id}</strong> status has been updated:</p>
+                <p><strong>From:</strong> ${oldStatus}<br><strong>To:</strong> ${status}</p>
+                <p>Thank you for shopping with <strong>Cafe HideIn</strong>!</p>
+              </div>
+            `
           );
+          console.log(`📧 Status update email sent to ${customer.email}`);
+        } catch (emailErr) {
+          console.error("❌ Failed to send status update email:", emailErr.message);
         }
       }
 
       return res.json({ message: "Order updated successfully", order });
     }
 
-    // If new order
+    // ======================================
+    // If new order → create a new record
+    // ======================================
     const newOrder = new Order({
       orderId: id,
       status,
@@ -64,18 +90,35 @@ router.post("/", async (req, res) => {
 
     await newOrder.save();
 
-    // Send email for new order
+    console.log(`🆕 New order created: #${id}`);
+
+    // Send email confirmation
     if (customer?.email) {
-      await sendOrderEmail(
-        customer.email,
-        "New Order Placed",
-        `Hi ${customer.name || "Customer"},\n\nYour order #${id} has been successfully placed. We'll notify you when its status changes.`
-      );
+      try {
+        await sendOrderEmail(
+          customer.email,
+          "New Order Placed",
+          `
+            <div style="font-family: Arial, sans-serif; color: #333;">
+              <h2>Hi ${customer.name || "Customer"},</h2>
+              <p>Thank you for your order with <strong>Cafe HideIn</strong>! 🎉</p>
+              <p><strong>Order ID:</strong> #${id}</p>
+              <p><strong>Total:</strong> ₹${total} ${currency}</p>
+              <p>We’ll notify you when your order status changes.</p>
+              <br/>
+              <p>Warm regards,<br/><strong>Cafe HideIn Team</strong></p>
+            </div>
+          `
+        );
+        console.log(`📧 Order confirmation email sent to ${customer.email}`);
+      } catch (emailErr) {
+        console.error("❌ Failed to send new order email:", emailErr.message);
+      }
     }
 
     res.status(201).json({ message: "Order saved", order: newOrder });
   } catch (err) {
-    console.error("POST /orders error:", err);
+    console.error("❌ POST /orders error:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
