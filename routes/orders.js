@@ -4,6 +4,55 @@ const Order = require("../models/Order");
 const protect = require("../middleware/authMiddleware");
 const sendOrderEmail = require("../utils/sendEmail"); // Brevo API version
 
+// ==========================
+// Helper: Generate HTML Email
+// ==========================
+const generateOrderEmailHTML = (customer, order) => {
+  const itemsRows = order.items
+    .map(
+      (item) => `
+      <tr>
+        <td style="padding: 8px; border: 1px solid #ddd;">${item.name}</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${item.quantity}</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">₹${item.price}</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">₹${item.price * item.quantity}</td>
+      </tr>
+    `
+    )
+    .join("");
+
+  return `
+    <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto;">
+      <h2 style="color: #4CAF50;">Hi ${customer.name || "Customer"},</h2>
+      <p>Thank you for your order with <strong>Dloklz Store</strong>! 🎉</p>
+      <p><strong>Order ID:</strong> #${order.orderId}</p>
+
+      <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+        <thead>
+          <tr style="background-color: #f2f2f2;">
+            <th style="padding: 8px; border: 1px solid #ddd;">Item</th>
+            <th style="padding: 8px; border: 1px solid #ddd;">Qty</th>
+            <th style="padding: 8px; border: 1px solid #ddd;">Price</th>
+            <th style="padding: 8px; border: 1px solid #ddd;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsRows}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3" style="padding: 8px; border: 1px solid #ddd; text-align: right;"><strong>Grand Total:</strong></td>
+            <td style="padding: 8px; border: 1px solid #ddd; text-align: right;"><strong>₹${order.total}</strong></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <p style="margin-top: 20px;">We’ll notify you when your order status changes.</p>
+      <p>Warm regards,<br/><strong>Dloklz Team</strong></p>
+    </div>
+  `;
+};
+
 // =======================================================
 // GET all orders (Owner: all | Vendor: only their orders)
 // =======================================================
@@ -54,14 +103,13 @@ router.post("/", async (req, res) => {
       if (customer?.email) {
         try {
           const html = `
-            <div style="font-family: Arial, sans-serif; color:#333;">
+            <div style="font-family: Arial, sans-serif; color:#333; max-width:600px; margin:auto;">
               <h2>Hi ${customer.name || "Customer"},</h2>
               <p>Your order <strong>#${id}</strong> status has been updated:</p>
               <p><strong>From:</strong> ${oldStatus}<br/><strong>To:</strong> ${status}</p>
-              <p>Thank you for shopping with <strong>Cafe HideIn</strong>!</p>
+              ${generateOrderEmailHTML(customer, order)}
             </div>
           `;
-
           await sendOrderEmail(customer.email, "Order Status Updated", "", html);
           console.log(`📧 Status update email sent to ${customer.email}`);
         } catch (emailErr) {
@@ -93,18 +141,7 @@ router.post("/", async (req, res) => {
     // Send new order confirmation email
     if (customer?.email) {
       try {
-        const html = `
-          <div style="font-family: Arial, sans-serif; color:#333;">
-            <h2>Hi ${customer.name || "Customer"},</h2>
-            <p>Thank you for your order with <strong>Cafe HideIn</strong>! 🎉</p>
-            <p><strong>Order ID:</strong> #${id}</p>
-            <p><strong>Total:</strong> ₹${total} ${currency}</p>
-            <p>We’ll notify you when your order status changes.</p>
-            <br/>
-            <p>Warm regards,<br/><strong>Cafe HideIn Team</strong></p>
-          </div>
-        `;
-
+        const html = generateOrderEmailHTML(customer, newOrder);
         await sendOrderEmail(customer.email, "New Order Placed", "", html);
         console.log(`📧 Order confirmation email sent to ${customer.email}`);
       } catch (emailErr) {
