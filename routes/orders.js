@@ -14,8 +14,8 @@ const generateOrderEmailHTML = (customer, order) => {
       <tr>
         <td style="padding: 8px; border: 1px solid #ddd;">${item.name}</td>
         <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${item.quantity}</td>
-        <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">₹${item.price}</td>
-        <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">₹${item.price * item.quantity}</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">₹${item.subtotal}</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">₹${item.total}</td>
       </tr>
     `
     )
