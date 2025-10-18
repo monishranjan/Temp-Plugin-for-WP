@@ -1,75 +1,45 @@
-const nodemailer = require("nodemailer");
+const axios = require("axios");
 
+/**
+ * Send an email using Brevo Transactional Email API
+ * @param {string} to - Recipient email
+ * @param {string} subject - Email subject
+ * @param {string} text - Plain text content
+ * @param {string} html - Optional HTML content
+ */
 const sendOrderEmail = async (to, subject, text, html = null) => {
-  console.log(`📧 Attempting to send email to ${to} | Subject: "${subject}"`);
+  console.log(`📧 Sending email to ${to} via Brevo API | Subject: "${subject}"`);
 
   try {
-    // Ensure all required env variables exist
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      throw new Error("Missing SMTP credentials in environment variables");
-    }
+    const apiKey = process.env.BREVO_API_KEY;
+    if (!apiKey) throw new Error("Missing BREVO_API_KEY in environment variables");
 
-    const port = Number(process.env.SMTP_PORT) || 587;
-    const secure = port === 465; // true for 465, false for others (TLS)
+    const fromEmail = process.env.EMAIL_FROM || "9984de001@smtp-brevo.com";
 
-    // Create reusable transporter object using SMTP (e.g., Brevo / Gmail / etc.)
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp-relay.brevo.com",
-      port,
-      secure,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-      tls: {
-        rejectUnauthorized: false, // useful for local / testing
-      },
-    });
-
-    // Verify connection only in development mode (to save time in prod)
-    if (process.env.NODE_ENV !== "production") {
-      try {
-        await transporter.verify();
-        console.log("✅ SMTP transporter verified successfully");
-      } catch (verifyErr) {
-        console.warn("⚠️ SMTP verification failed (continuing anyway):", verifyErr.message);
-      }
-    }
-
-    // Define email content
-    const mailOptions = {
-      from: `"Dloklz Store" <${process.env.EMAIL_FROM || process.env.SMTP_USER}>`,
-      to,
+    const payload = {
+      sender: { name: "Dloklz Store", email: fromEmail },
+      to: [{ email: to }],
       subject,
-      text,
-      html: html || `<p>${text.replace(/\n/g, "<br>")}</p>`, // fallback HTML
+      textContent: text,
+      htmlContent: html || `<p>${text.replace(/\n/g, "<br>")}</p>`,
     };
 
-    // Send email
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ Email sent to ${to} | Message ID: ${info.messageId}`);
+    const response = await axios.post(
+      "https://api.brevo.com/v3/smtp/email",
+      payload,
+      {
+        headers: {
+          "api-key": apiKey,
+          "Content-Type": "application/json",
+        },
+      }
+    );
 
-    return info;
+    console.log("✅ Email sent successfully via Brevo API", response.data);
+    return response.data;
   } catch (error) {
-    console.error("❌ Email sending failed:", error.message);
-
-    // Handle specific common errors for clarity
-    switch (error.code) {
-      case "EAUTH":
-        console.error("⚠️ Authentication failed — check your SMTP_USER and SMTP_PASS.");
-        break;
-      case "ECONNECTION":
-        console.error("⚠️ Could not connect to SMTP server. Check host/port or firewall rules.");
-        break;
-      case "ETIMEDOUT":
-        console.error("⚠️ Connection timed out — verify network or try port 587/465.");
-        break;
-      default:
-        console.error("⚠️ Unknown email error:", error);
-    }
-
-    // Don't crash the app — just log and rethrow
-    throw new Error("Email sending failed");
+    console.error("❌ Failed to send email via Brevo API:", error.response?.data || error.message);
+    throw new Error("Email sending failed via Brevo API");
   }
 };
 

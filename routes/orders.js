@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Order = require("../models/Order");
 const protect = require("../middleware/authMiddleware");
-const sendOrderEmail = require("../utils/sendEmail"); // SMTP email utility
+const sendOrderEmail = require("../utils/sendOrderEmail"); // Brevo API version
 
 // =======================================================
 // GET all orders (Owner: all | Vendor: only their orders)
@@ -50,20 +50,19 @@ router.post("/", async (req, res) => {
 
       console.log(`🔄 Order #${id} status updated: ${oldStatus} → ${status}`);
 
+      // Send status update email
       if (customer?.email) {
         try {
-          await sendOrderEmail(
-            customer.email,
-            "Order Status Updated",
-            `
-              <div style="font-family: Arial, sans-serif; color: #333;">
-                <h2>Hi ${customer.name || "Customer"},</h2>
-                <p>Your order <strong>#${id}</strong> status has been updated:</p>
-                <p><strong>From:</strong> ${oldStatus}<br><strong>To:</strong> ${status}</p>
-                <p>Thank you for shopping with <strong>Cafe HideIn</strong>!</p>
-              </div>
-            `
-          );
+          const html = `
+            <div style="font-family: Arial, sans-serif; color:#333;">
+              <h2>Hi ${customer.name || "Customer"},</h2>
+              <p>Your order <strong>#${id}</strong> status has been updated:</p>
+              <p><strong>From:</strong> ${oldStatus}<br/><strong>To:</strong> ${status}</p>
+              <p>Thank you for shopping with <strong>Cafe HideIn</strong>!</p>
+            </div>
+          `;
+
+          await sendOrderEmail(customer.email, "Order Status Updated", "", html);
           console.log(`📧 Status update email sent to ${customer.email}`);
         } catch (emailErr) {
           console.error("❌ Failed to send status update email:", emailErr.message);
@@ -89,27 +88,24 @@ router.post("/", async (req, res) => {
     });
 
     await newOrder.save();
-
     console.log(`🆕 New order created: #${id}`);
 
-    // Send email confirmation
+    // Send new order confirmation email
     if (customer?.email) {
       try {
-        await sendOrderEmail(
-          customer.email,
-          "New Order Placed",
-          `
-            <div style="font-family: Arial, sans-serif; color: #333;">
-              <h2>Hi ${customer.name || "Customer"},</h2>
-              <p>Thank you for your order with <strong>Cafe HideIn</strong>! 🎉</p>
-              <p><strong>Order ID:</strong> #${id}</p>
-              <p><strong>Total:</strong> ₹${total} ${currency}</p>
-              <p>We’ll notify you when your order status changes.</p>
-              <br/>
-              <p>Warm regards,<br/><strong>Cafe HideIn Team</strong></p>
-            </div>
-          `
-        );
+        const html = `
+          <div style="font-family: Arial, sans-serif; color:#333;">
+            <h2>Hi ${customer.name || "Customer"},</h2>
+            <p>Thank you for your order with <strong>Cafe HideIn</strong>! 🎉</p>
+            <p><strong>Order ID:</strong> #${id}</p>
+            <p><strong>Total:</strong> ₹${total} ${currency}</p>
+            <p>We’ll notify you when your order status changes.</p>
+            <br/>
+            <p>Warm regards,<br/><strong>Cafe HideIn Team</strong></p>
+          </div>
+        `;
+
+        await sendOrderEmail(customer.email, "New Order Placed", "", html);
         console.log(`📧 Order confirmation email sent to ${customer.email}`);
       } catch (emailErr) {
         console.error("❌ Failed to send new order email:", emailErr.message);
