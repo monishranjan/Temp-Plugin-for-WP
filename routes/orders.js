@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Order = require("../models/Order");
 const protect = require("../middleware/authMiddleware");
-const sendOrderEmail = require("../utils/sendOrderEmail"); // Brevo API version
+const sendOrderEmail = require("../utils/sendEmail"); // Brevo API version
 
 // =======================================================
 // GET all orders (Owner: all | Vendor: only their orders)
