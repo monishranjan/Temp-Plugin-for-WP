@@ -7,7 +7,7 @@ const axios = require("axios");
  * @param {string} text - Plain text content
  * @param {string} html - Optional HTML content
  */
-const sendOrderEmail = async (to, subject, text, html = null) => {
+const sendOrderEmail = async (to, subject, text = "", html = null) => {
   console.log(`📧 Sending email to ${to} via Brevo API | Subject: "${subject}"`);
 
   try {
@@ -20,8 +20,8 @@ const sendOrderEmail = async (to, subject, text, html = null) => {
       sender: { name: "Dloklz Store", email: fromEmail },
       to: [{ email: to }],
       subject,
-      textContent: text,
-      htmlContent: html || `<p>${text.replace(/\n/g, "<br>")}</p>`,
+      textContent: text || html?.replace(/<[^>]*>/g, " ").trim() || "No content provided.",
+      htmlContent: html || `<p>${text || "No content provided."}</p>`,
     };
 
     const response = await axios.post(
