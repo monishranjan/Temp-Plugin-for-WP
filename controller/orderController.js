@@ -1,6 +1,6 @@
 const Order = require("../models/Order");
 const sendOrderEmail = require("../utils/sendEmail");
-const { generateOrderEmailHTML } = require("../utils/emailTemplate");
+const { generateOrderEmailHTML } = require("../utils/emailTemplates");
 
 /**
  * Create a new order and send confirmation email
