@@ -1,11 +1,13 @@
 const express = require("express");
 const router = express.Router();
-const { createOrder, getOrders } = require("../controller/orderController");
+const { createOrUpdateOrder, getOrders } = require("../controller/orderController");
 const protect = require("../middleware/authMiddleware");
 
-// ===========================
-// GET all orders (owner/vendor)
-// ===========================
+/**
+ * ===========================
+ * GET all orders (owner/vendor)
+ * ===========================
+ */
 router.get("/", protect(), async (req, res) => {
   try {
     const orders = await getOrders(req.user);
@@ -16,29 +18,37 @@ router.get("/", protect(), async (req, res) => {
   }
 });
 
-// ============================================
-// POST a new order (webhook from WooCommerce)
-// ============================================
+/**
+ * ============================================
+ * POST a new or updated order (WooCommerce Webhook)
+ * ============================================
+ */
 router.post("/", async (req, res) => {
   try {
     const { id, orderId } = req.body;
 
-    // Determine final orderId
+    // Determine the correct orderId
     const finalOrderId = id || orderId;
     if (!finalOrderId) {
-      return res
-        .status(400)
-        .json({ message: "Missing orderId in request body" });
+      return res.status(400).json({ message: "Missing orderId in request body" });
     }
 
-    // Add orderId to body if missing
-    const orderData = { ...req.body, orderId: finalOrderId };
+    // Prepare sanitized order data
+    const orderData = {
+      ...req.body,
+      orderId: finalOrderId,
+      status: req.body.status || "pending", // default status if missing
+    };
 
-    // Create or update order
-    const order = await createOrder(orderData);
-    console.log(`🆕/🔄 Order processed: #${finalOrderId}`);
+    // Create or update the order safely (no duplicates)
+    const { order, isNew } = await createOrUpdateOrder(orderData);
 
-    res.status(201).json({ message: "Order processed successfully", order });
+    console.log(`🧩 Order processed (Created/Updated): #${finalOrderId}`);
+
+    res.status(201).json({
+      message: isNew ? "New order created" : "Order updated successfully",
+      order,
+    });
   } catch (err) {
     console.error("❌ POST /orders error:", err.message);
     res.status(500).json({ message: err.message });
