@@ -9,13 +9,13 @@ const WC_KEY = process.env.CONSUMER_KEY;
 const WC_SECRET = process.env.CONSUMER_SECRET;
 
 /**
- * ✅ Create or update an order safely
+ * ✅ Create or update an order safely and sync with WooCommerce
  * @param {Object} orderData - Order payload
  * @returns {Object} { order, isNew } - Order document and whether it was newly created
  */
 async function createOrUpdateOrder(orderData) {
   try {
-    // Check if order already exists
+    // Check if order exists
     let order = await Order.findOne({ orderId: orderData.orderId });
     let isNew = false;
 
@@ -65,13 +65,12 @@ async function createOrUpdateOrder(orderData) {
       }
     }
 
-    // 🔄 Sync order status with WooCommerce
-    try {
-      if (orderData.woo_order_id) {
+    // 🔄 Sync with WooCommerce if woo_order_id provided
+    if (orderData.woo_order_id) {
+      try {
         const wcOrderId = orderData.woo_order_id;
 
         // Map status to WooCommerce compatible status
-        let wcStatus = order.status; // you can map custom statuses if needed
         const statusMap = {
           pending: "pending",
           failed: "failed",
@@ -80,8 +79,9 @@ async function createOrUpdateOrder(orderData) {
           cancelled: "cancelled",
           on_hold: "on-hold",
         };
-        wcStatus = statusMap[order.status] || "pending";
+        const wcStatus = statusMap[order.status] || "pending";
 
+        // Only call WooCommerce if status changed
         await axios.put(
           `${WC_URL}/orders/${wcOrderId}`,
           { status: wcStatus },
@@ -89,11 +89,11 @@ async function createOrUpdateOrder(orderData) {
         );
 
         console.log(`✅ WooCommerce Order #${wcOrderId} status synced: ${wcStatus}`);
-      } else {
-        console.log("⚠️ WooCommerce order ID not provided. Skipping WC sync.");
+      } catch (wcErr) {
+        console.error("❌ WooCommerce sync failed:", wcErr.response?.data || wcErr.message);
       }
-    } catch (wcErr) {
-      console.error("❌ WooCommerce sync failed:", wcErr.response?.data || wcErr.message);
+    } else {
+      console.log("⚠️ WooCommerce order ID not provided. Skipping WooCommerce sync.");
     }
 
     return { order, isNew };

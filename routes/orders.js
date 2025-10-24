@@ -25,10 +25,10 @@ router.get("/", protect(), async (req, res) => {
  */
 router.post("/", async (req, res) => {
   try {
-    // WooCommerce webhook payload can contain id or order_number
+    // WooCommerce webhook payload can contain 'id' or 'order_number'
     const { id, order_number, status } = req.body;
 
-    // Determine the correct orderId
+    // Determine final orderId for internal MongoDB
     const finalOrderId = id || order_number;
     if (!finalOrderId) {
       return res.status(400).json({ message: "Missing orderId in request body" });
@@ -38,11 +38,13 @@ router.post("/", async (req, res) => {
     const orderData = {
       ...req.body,
       orderId: finalOrderId,
-      woo_order_id: id || null, // WooCommerce internal ID for syncing
-      status: status || "pending", // default status if missing
+      woo_order_id: id ? Number(id) : null, // WooCommerce internal ID for syncing
+      status: status || "pending", // Default status if missing
     };
 
-    // Create or update the order safely (no duplicates)
+    console.log(`📥 Received order payload for Order #${finalOrderId}`);
+
+    // Create or update the order safely
     const { order, isNew } = await createOrUpdateOrder(orderData);
 
     console.log(`🧩 Order processed (Created/Updated): #${finalOrderId}`);
