@@ -29,7 +29,7 @@ router.post("/", async (req, res) => {
     const { id, order_number, status } = req.body;
 
     // Determine final orderId for internal MongoDB
-    const finalOrderId = id || order_number;
+    const finalOrderId = id || order_number || orderId;
     if (!finalOrderId) {
       return res.status(400).json({ message: "Missing orderId in request body" });
     }
