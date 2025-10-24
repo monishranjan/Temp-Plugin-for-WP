@@ -26,7 +26,7 @@ router.get("/", protect(), async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     // WooCommerce webhook payload can contain 'id' or 'order_number'
-    const { id, order_number, status } = req.body;
+    const { id, order_number, orderId, status } = req.body;
 
     // Determine final orderId for internal MongoDB
     const finalOrderId = id || order_number || orderId;
