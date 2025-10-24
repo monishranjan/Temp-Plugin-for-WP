@@ -4,7 +4,7 @@ const { generateOrderEmailHTML } = require("../utils/emailTemplates");
 const axios = require("axios");
 
 // WooCommerce credentials from environment
-const WC_URL = "https://dloklz.com/wp-json/wc/v3";
+const WC_URL = "https://dloklz.com/wp-json/custom-api/v1/update-order-status";
 const WC_KEY = process.env.CONSUMER_KEY;
 const WC_SECRET = process.env.CONSUMER_SECRET;
 
