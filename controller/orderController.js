@@ -3,7 +3,7 @@ const sendOrderEmail = require("../utils/sendEmail");
 const { generateOrderEmailHTML } = require("../utils/emailTemplates");
 const axios = require("axios");
 
-// WooCommerce credentials from environment
+// WooCommerce custom API endpoint
 const WC_URL = "https://dloklz.com/wp-json/custom-api/v1/update-order-status";
 const WC_KEY = process.env.CONSUMER_KEY;
 const WC_SECRET = process.env.CONSUMER_SECRET;
@@ -65,35 +65,21 @@ async function createOrUpdateOrder(orderData) {
       }
     }
 
-    // 🔄 Sync with WooCommerce if woo_order_id provided
-    if (orderData.woo_order_id) {
-      try {
-        const wcOrderId = orderData.woo_order_id;
-
-        // Map status to WooCommerce compatible status
-        const statusMap = {
-          pending: "pending",
-          failed: "failed",
-          processing: "processing",
-          completed: "completed",
-          cancelled: "cancelled",
-          on_hold: "on-hold",
-        };
-        const wcStatus = statusMap[order.status] || "pending";
-
-        // Only call WooCommerce if status changed
-        await axios.put(
-          `${WC_URL}/orders/${wcOrderId}`,
-          { status: wcStatus },
-          { auth: { username: WC_KEY, password: WC_SECRET } }
-        );
-
-        console.log(`✅ WooCommerce Order #${wcOrderId} status synced: ${wcStatus}`);
-      } catch (wcErr) {
-        console.error("❌ WooCommerce sync failed:", wcErr.response?.data || wcErr.message);
-      }
-    } else {
-      console.log("⚠️ WooCommerce order ID not provided. Skipping WooCommerce sync.");
+    // 🔄 Sync with WooCommerce via custom API
+    try {
+      await axios.post(
+        WC_URL,
+        { order_id: order.orderId, status: order.status },
+        {
+          auth: {
+            username: WC_KEY,
+            password: WC_SECRET,
+          },
+        }
+      );
+      console.log(`✅ WooCommerce Order #${order.orderId} status synced: ${order.status}`);
+    } catch (wcErr) {
+      console.error("❌ WooCommerce sync failed:", wcErr.response?.data || wcErr.message);
     }
 
     return { order, isNew };
