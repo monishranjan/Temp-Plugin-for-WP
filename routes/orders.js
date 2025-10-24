@@ -25,10 +25,11 @@ router.get("/", protect(), async (req, res) => {
  */
 router.post("/", async (req, res) => {
   try {
-    const { id, orderId } = req.body;
+    // WooCommerce webhook payload can contain id or order_number
+    const { id, order_number, status } = req.body;
 
     // Determine the correct orderId
-    const finalOrderId = id || orderId;
+    const finalOrderId = id || order_number;
     if (!finalOrderId) {
       return res.status(400).json({ message: "Missing orderId in request body" });
     }
@@ -37,7 +38,8 @@ router.post("/", async (req, res) => {
     const orderData = {
       ...req.body,
       orderId: finalOrderId,
-      status: req.body.status || "pending", // default status if missing
+      woo_order_id: id || null, // WooCommerce internal ID for syncing
+      status: status || "pending", // default status if missing
     };
 
     // Create or update the order safely (no duplicates)

@@ -1,6 +1,12 @@
 const Order = require("../models/Order");
 const sendOrderEmail = require("../utils/sendEmail");
 const { generateOrderEmailHTML } = require("../utils/emailTemplates");
+const axios = require("axios");
+
+// WooCommerce credentials from environment
+const WC_URL = "https://dloklz.com/wp-json/wc/v3";
+const WC_KEY = process.env.CONSUMER_KEY;
+const WC_SECRET = process.env.CONSUMER_SECRET;
 
 /**
  * ✅ Create or update an order safely
@@ -14,7 +20,7 @@ async function createOrUpdateOrder(orderData) {
     let isNew = false;
 
     if (!order) {
-      // Create new order
+      // Create new order in Mongo
       order = new Order({
         ...orderData,
         type: "new_order",
@@ -57,6 +63,37 @@ async function createOrUpdateOrder(orderData) {
       } else {
         console.log(`ℹ️ Order #${order.orderId} already has status '${oldStatus}'. No update sent.`);
       }
+    }
+
+    // 🔄 Sync order status with WooCommerce
+    try {
+      if (orderData.woo_order_id) {
+        const wcOrderId = orderData.woo_order_id;
+
+        // Map status to WooCommerce compatible status
+        let wcStatus = order.status; // you can map custom statuses if needed
+        const statusMap = {
+          pending: "pending",
+          failed: "failed",
+          processing: "processing",
+          completed: "completed",
+          cancelled: "cancelled",
+          on_hold: "on-hold",
+        };
+        wcStatus = statusMap[order.status] || "pending";
+
+        await axios.put(
+          `${WC_URL}/orders/${wcOrderId}`,
+          { status: wcStatus },
+          { auth: { username: WC_KEY, password: WC_SECRET } }
+        );
+
+        console.log(`✅ WooCommerce Order #${wcOrderId} status synced: ${wcStatus}`);
+      } else {
+        console.log("⚠️ WooCommerce order ID not provided. Skipping WC sync.");
+      }
+    } catch (wcErr) {
+      console.error("❌ WooCommerce sync failed:", wcErr.response?.data || wcErr.message);
     }
 
     return { order, isNew };
