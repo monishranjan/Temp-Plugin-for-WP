@@ -42,7 +42,7 @@ async function createOrUpdateOrder(orderData) {
         order.status = newStatus;
         order.old_status = oldStatus;
         order.new_status = newStatus;
-        order.type = "status_update";
+        order.type = "status_change";
         await order.save();
 
         console.log(`🔄 Order #${order.orderId} status updated: ${oldStatus} → ${newStatus}`);
