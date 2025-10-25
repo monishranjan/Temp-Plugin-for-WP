@@ -3,10 +3,8 @@ const router = express.Router();
 const { createOrUpdateOrder } = require("../controller/orderController");
 
 /**
- * ===================================
  * POST /webhook/woocommerce
  * Handles WooCommerce webhook for order create/update
- * ===================================
  */
 router.post("/woocommerce", async (req, res) => {
   try {
@@ -37,10 +35,11 @@ router.post("/woocommerce", async (req, res) => {
             vendor_id: item.vendor_id || null,
           }))
         : [],
-      type: "webhook_update",
+      type: "status_change", // mapped from webhook_update
     };
 
-    await createOrUpdateOrder(orderData);
+    // 🔁 Skip WooCommerce sync for webhook triggers
+    await createOrUpdateOrder(orderData, true);
 
     res.status(200).json({ message: "✅ Order processed successfully" });
   } catch (err) {

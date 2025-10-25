@@ -32,7 +32,7 @@ const orderSchema = new mongoose.Schema(
 
     type: {
       type: String,
-      enum: ["new_order", "status_change", "initial_sync"],
+      enum: ["new_order", "status_change", "initial_sync", "webhook_update"],
       default: "new_order",
     },
     old_status: { type: String, default: null },
@@ -44,6 +44,7 @@ const orderSchema = new mongoose.Schema(
 /**
  * 🧠 Pre-save hook
  * Automatically extract vendor_id from vendor string if missing
+ * Handles old_status correctly on updates
  */
 orderSchema.pre("save", function (next) {
   if (Array.isArray(this.items)) {
@@ -55,9 +56,9 @@ orderSchema.pre("save", function (next) {
     });
   }
 
-  // Automatically fill old_status on first update
-  if (this.isModified("status") && !this.old_status) {
-    this.old_status = this.status;
+  // Set old_status only on updates, not on creation
+  if (!this.isNew && this.isModified("status") && !this.old_status) {
+    this.old_status = this.get("status");
   }
 
   next();
@@ -65,20 +66,30 @@ orderSchema.pre("save", function (next) {
 
 /**
  * 🔍 Static method: upsertOrder
- * Prevents duplicate orders on updates
+ * Safely updates existing orders or creates new ones
  */
 orderSchema.statics.upsertOrder = async function (orderData) {
-  const { orderId } = orderData;
+  const { orderId, type, status } = orderData;
   if (!orderId) throw new Error("orderId is required");
 
   let order = await this.findOne({ orderId });
   if (order) {
-    // Update existing order instead of creating a new one
-    Object.assign(order, orderData);
+    // Update only necessary fields
+    order.status = status || order.status;
+    order.old_status = order.old_status || order.status;
+    order.new_status = status || order.new_status;
+    order.type = type || order.type;
+    order.total = orderData.total ?? order.total;
+    order.currency = orderData.currency ?? order.currency;
+    order.payment = orderData.payment ?? order.payment;
+    order.customer = orderData.customer ?? order.customer;
+    order.items = orderData.items ?? order.items;
+
     await order.save();
   } else {
     order = await this.create(orderData);
   }
+
   return order;
 };
 

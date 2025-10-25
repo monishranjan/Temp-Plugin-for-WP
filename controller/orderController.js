@@ -10,67 +10,35 @@ const WC_SECRET = process.env.CONSUMER_SECRET;
 /**
  * ✅ Create or update an order safely and sync with WooCommerce
  * @param {Object} orderData - Order payload
- * @param {Boolean} skipWCSync - (optional) prevent sending updates back to WooCommerce (useful for webhooks)
+ * @param {Boolean} skipWCSync - prevent sending updates back to WooCommerce (useful for webhook triggers)
  */
 async function createOrUpdateOrder(orderData, skipWCSync = false) {
   try {
-    let order = await Order.findOne({ orderId: orderData.orderId });
-    let isNew = false;
+    // 🧩 Upsert order using static method
+    const order = await Order.upsertOrder(orderData);
 
-    if (!order) {
-      // 🆕 Create new order
-      order = new Order({
-        ...orderData,
-        type: orderData.type || "new_order",
-        status: orderData.status || "pending",
-        new_status: orderData.status || "pending",
-      });
-      await order.save();
-      isNew = true;
-      console.log(`🆕 Order #${order.orderId} created in MongoDB`);
+    const isNew = orderData.type === "new_order" || orderData.type === "initial_sync";
 
-      // ✉️ Send email only for new orders
-      if (order.customer?.email) {
-        const html = generateOrderEmailHTML(order.customer, order);
-        const subject = `Order Created #${order.orderId}`;
-        await sendOrderEmail(order.customer.email, subject, "", html);
-        console.log(`📧 Confirmation email sent to ${order.customer.email}`);
-      }
-    } else {
-      // 🔄 Update status if changed
-      const oldStatus = order.status;
-      const newStatus = orderData.status || oldStatus;
-
-      if (oldStatus !== newStatus) {
-        order.status = newStatus;
-        order.old_status = oldStatus;
-        order.new_status = newStatus;
-        order.type = "status_change";
-        await order.save();
-        console.log(`🔄 Order #${order.orderId} status updated: ${oldStatus} → ${newStatus}`);
-
-        // ✉️ Send update email if status actually changed
-        if (order.customer?.email) {
-          const html = generateOrderEmailHTML(order.customer, order);
-          const subject = `Order Update #${order.orderId}`;
-          await sendOrderEmail(order.customer.email, subject, "", html);
-          console.log(`📧 Status update email sent to ${order.customer.email}`);
-        }
-      } else {
-        console.log(`ℹ️ Order #${order.orderId} already has status '${oldStatus}'`);
-      }
+    // ✉️ Send emails
+    if (order.customer?.email) {
+      const html = generateOrderEmailHTML(order.customer, order);
+      const subject = isNew
+        ? `Order Created #${order.orderId}`
+        : `Order Update #${order.orderId}`;
+      await sendOrderEmail(order.customer.email, subject, "", html);
+      console.log(`📧 Email sent to ${order.customer.email} (${subject})`);
     }
 
-    // ⚙️ Sync with WooCommerce unless it's a webhook-triggered update
+    // ⚙️ Sync with WooCommerce unless skipped
     if (!skipWCSync) {
       try {
         const payload = {
           order_id: order.orderId,
           status: order.status,
-          ...(order.total && { total: order.total }),
-          ...(order.currency && { currency: order.currency }),
-          ...(order.customer && { customer: order.customer }),
-          ...(order.items && { items: order.items }),
+          total: order.total,
+          currency: order.currency,
+          customer: order.customer,
+          items: order.items,
         };
 
         await axios.post(WC_URL, payload, {
@@ -79,11 +47,13 @@ async function createOrUpdateOrder(orderData, skipWCSync = false) {
 
         console.log(`✅ WooCommerce Order #${order.orderId} synced: ${order.status}`);
       } catch (wcErr) {
-        console.log(WC_KEY, "---||---", WC_SECRET);
-        console.error("❌ WooCommerce sync failed:", wcErr.response?.data || wcErr.message);
+        console.error(
+          "❌ WooCommerce sync failed:",
+          wcErr.response?.data || wcErr.message
+        );
       }
     } else {
-      console.log(`🔁 Skipping WooCommerce sync (triggered by webhook) for Order #${order.orderId}`);
+      console.log(`🔁 Skipping WooCommerce sync for Order #${order.orderId}`);
     }
 
     return { order, isNew };
@@ -101,7 +71,9 @@ async function getOrders(user) {
     if (user.role === "owner") {
       return await Order.find().sort({ createdAt: -1 });
     } else if (user.role === "vendor") {
-      return await Order.find({ "items.vendor_id": user.vendor_id }).sort({ createdAt: -1 });
+      return await Order.find({ "items.vendor_id": user.vendor_id }).sort({
+        createdAt: -1,
+      });
     } else {
       return [];
     }
