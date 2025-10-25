@@ -6,6 +6,7 @@ const connectDB = require("./utils/db");
 // Routes
 const authRoutes = require("./routes/auth");
 const orderRoutes = require("./routes/orders");
+const webhookRoutes = require("./routes/webhookRoutes"); // 👈 new import
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -33,6 +34,7 @@ app.use(express.json({ limit: "10mb" }));
 // ✅ Routes
 app.use("/auth", authRoutes);
 app.use("/orders", orderRoutes);
+app.use("/webhook", webhookRoutes); // 👈 added
 
 // ✅ Health check route
 app.get("/", (req, res) => {

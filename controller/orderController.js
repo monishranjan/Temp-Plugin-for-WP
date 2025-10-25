@@ -3,7 +3,6 @@ const sendOrderEmail = require("../utils/sendEmail");
 const { generateOrderEmailHTML } = require("../utils/emailTemplates");
 const axios = require("axios");
 
-// WooCommerce custom API endpoint
 const WC_URL = "https://dloklz.com/wp-json/custom-api/v1/update-order-status";
 const WC_KEY = process.env.CONSUMER_KEY;
 const WC_SECRET = process.env.CONSUMER_SECRET;
@@ -11,28 +10,26 @@ const WC_SECRET = process.env.CONSUMER_SECRET;
 /**
  * ✅ Create or update an order safely and sync with WooCommerce
  * @param {Object} orderData - Order payload
- * @returns {Object} { order, isNew } - Order document and whether it was newly created
+ * @param {Boolean} skipWCSync - (optional) prevent sending updates back to WooCommerce (useful for webhooks)
  */
-async function createOrUpdateOrder(orderData) {
+async function createOrUpdateOrder(orderData, skipWCSync = false) {
   try {
-    // Check if order exists
     let order = await Order.findOne({ orderId: orderData.orderId });
     let isNew = false;
 
     if (!order) {
-      // Create new order in Mongo
+      // 🆕 Create new order
       order = new Order({
         ...orderData,
-        type: "new_order",
+        type: orderData.type || "new_order",
         status: orderData.status || "pending",
         new_status: orderData.status || "pending",
       });
       await order.save();
       isNew = true;
+      console.log(`🆕 Order #${order.orderId} created in MongoDB`);
 
-      console.log(`🆕 Order #${order.orderId} created successfully.`);
-
-      // Send "Order Created" email
+      // ✉️ Send email only for new orders
       if (order.customer?.email) {
         const html = generateOrderEmailHTML(order.customer, order);
         const subject = `Order Created #${order.orderId}`;
@@ -40,7 +37,7 @@ async function createOrUpdateOrder(orderData) {
         console.log(`📧 Confirmation email sent to ${order.customer.email}`);
       }
     } else {
-      // Update existing order if status has changed
+      // 🔄 Update status if changed
       const oldStatus = order.status;
       const newStatus = orderData.status || oldStatus;
 
@@ -50,10 +47,9 @@ async function createOrUpdateOrder(orderData) {
         order.new_status = newStatus;
         order.type = "status_change";
         await order.save();
-
         console.log(`🔄 Order #${order.orderId} status updated: ${oldStatus} → ${newStatus}`);
 
-        // Send "Order Update" email
+        // ✉️ Send update email if status actually changed
         if (order.customer?.email) {
           const html = generateOrderEmailHTML(order.customer, order);
           const subject = `Order Update #${order.orderId}`;
@@ -61,25 +57,33 @@ async function createOrUpdateOrder(orderData) {
           console.log(`📧 Status update email sent to ${order.customer.email}`);
         }
       } else {
-        console.log(`ℹ️ Order #${order.orderId} already has status '${oldStatus}'. No update sent.`);
+        console.log(`ℹ️ Order #${order.orderId} already has status '${oldStatus}'`);
       }
     }
 
-    // 🔄 Sync with WooCommerce via custom API
-    try {
-      await axios.post(
-        WC_URL,
-        { order_id: order.orderId, status: order.status },
-        {
-          auth: {
-            username: WC_KEY,
-            password: WC_SECRET,
-          },
-        }
-      );
-      console.log(`✅ WooCommerce Order #${order.orderId} status synced: ${order.status}`);
-    } catch (wcErr) {
-      console.error("❌ WooCommerce sync failed:", wcErr.response?.data || wcErr.message);
+    // ⚙️ Sync with WooCommerce unless it's a webhook-triggered update
+    if (!skipWCSync) {
+      try {
+        const payload = {
+          order_id: order.orderId,
+          status: order.status,
+          ...(order.total && { total: order.total }),
+          ...(order.currency && { currency: order.currency }),
+          ...(order.customer && { customer: order.customer }),
+          ...(order.items && { items: order.items }),
+        };
+
+        await axios.post(WC_URL, payload, {
+          auth: { username: WC_KEY, password: WC_SECRET },
+        });
+
+        console.log(`✅ WooCommerce Order #${order.orderId} synced: ${order.status}`);
+      } catch (wcErr) {
+        console.log(WC_KEY, "---||---", WC_SECRET);
+        console.error("❌ WooCommerce sync failed:", wcErr.response?.data || wcErr.message);
+      }
+    } else {
+      console.log(`🔁 Skipping WooCommerce sync (triggered by webhook) for Order #${order.orderId}`);
     }
 
     return { order, isNew };
